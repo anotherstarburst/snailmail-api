@@ -1,0 +1,6 @@
+#!include:.gitignore
+deploy.sh
+run-local.sh
+README.md
+.git
+.github

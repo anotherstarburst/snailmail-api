@@ -1,0 +1,9 @@
+Flask==3.1.2
+pydantic==2.12.2
+python-dotenv==1.1.1
+requests==2.32.5
+gunicorn==21.2.0
+flask-cors==6.0.1
+opencv-python-headless==4.*
+numpy==2.*
+google-auth==2.*

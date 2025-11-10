@@ -1,0 +1,1 @@
+class ClientDisconnectError(Exception): pass
