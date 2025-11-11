@@ -1,253 +1,184 @@
 # SnailMail API
 
-A Flask API for analyzing Rubik's cube faces using vision models. Supports both local development with Ollama and production deployment on Google Cloud Run.
+A Flask API for analyzing Rubik's cube faces and generating witty taunts. It uses a hybrid system for cube analysis, starting with a fast, local computer vision (CV) algorithm and falling back to a powerful vision language model (VLLM) for difficult cases. It supports both local development with Ollama and production deployment on Google Cloud Run.
 
 ## Features
 
-- 📸 Image upload and analysis
-- 🔍 Vision model inference (Gemma via Ollama or Cloud Run)
-- 🗣️ Witty text service (Gemma via Ollama or Cloud Run)
-- ✅ Pydantic validation of cube face colors
-- 🔄 Environment-based service switching
-- 🐳 Docker-ready for Cloud Run deployment
+-   📸 **Hybrid Cube Analysis**: Uses OpenCV for fast, robust CV-based color detection with an LLM fallback for improved accuracy.
+-   🗣️ **Witty Taunt Generation**: An endpoint to generate dynamic, character-based trash talk using a text-based language model.
+-   ✅ **Pydantic Validation**: Ensures all API inputs and outputs are strongly typed and valid.
+-   🔄 **Environment-Based Configuration**: Easily switch between local (`ollama`) and production (`cloudrun`) services.
+-   🐳 **Docker-Ready**: Fully containerized for easy deployment on Google Cloud Run or other container platforms.
 
 ## Quick Start
 
 ### Local Development with Ollama
 
-1. **Install and start Ollama:**
-   ```bash
-   # Install Ollama
-   curl -fsSL https://ollama.com/install.sh | sh
+1.  **Install and start Ollama:**
+    ```bash
+    # Install Ollama
+    curl -fsSL https://ollama.com/install.sh | sh
 
-   # Start Ollama service
-   ollama serve
+    # Start Ollama service in a separate terminal
+    ollama serve
+    ```
 
-   # Pull Gemma model (in another terminal)
-   ollama pull gemma3:1b
-   ollama pull gemma3:12b
-   ```
+2.  **Pull the required models:**
+    ```bash
+    # Pull the models specified in your .env file (defaults shown)
+    ollama pull gemma3:1b   # For witty text
+    ollama pull gemma3:12b  # For cube analysis fallback
+    ```
 
-2. **Run the API:**
-   ```bash
-   # Make script executable
-   chmod +x run-local.sh
+3.  **Run the API:**
+    ```bash
+    # Make script executable
+    chmod +x run-local.sh
 
-   # Run locally
-   ./run-local.sh
+    # Run the Flask app directly
+    ./run-local.sh
 
-   # Or run in Docker
-   ./run-local.sh docker
-   ```
+    # Or, to run inside a Docker container
+    ./run-local.sh docker
+    ```
 
-3. **Test the API:**
-   ```bash
-   # Health check
-   curl http://localhost:5000/health
+4.  **Test the API:**
+    ```bash
+    # Health check
+    curl http://localhost:5000/health
 
-   # Analyze a cube image
-   curl -X POST http://localhost:5000/analyze \
-     -F "image=@path/to/cube_image.jpg"
+    # Analyze a cube image
+    curl -X POST http://localhost:5000/analyze-cube \
+      -F "image=@/path/to/your/cube_image.jpg"
 
-   # Validate cube data directly
-   curl -X POST http://localhost:5000/validate-cube \
+    # Generate a taunt
+    curl -X POST http://localhost:5000/taunt \
      -H "Content-Type: application/json" \
-     -d '{"TL":"R","TC":"R","TR":"R","ML":"O","C":"R","MR":"G","BL":"Y","BC":"G","BR":"B"}'
-   ```
+     -d '{"npc_character": "Sarky the Squirrel", "player_character": "Dave the Developer"}'
+    ```
 
 ## Environment Configuration
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root to configure the application:
 
-```bash
-# Service Type: 'ollama' or 'cloudrun'
+```.env
+# Service Type: 'ollama' for local, 'cloudrun' for production
 SERVICE_TYPE=ollama
 
-# Inference Service URL
-# Local: http://localhost:11434
-# Cloud Run: https://your-inference-service.run.app
-INFERENCE_SERVICE_URL=http://localhost:11434
+# URLs for the inference services (can be the same for Ollama)
+WITTY_TEXT_INFERENCE_SERVICE_URL=http://localhost:11434
+CUBE_ANALYSIS_INFERENCE_SERVICE_URL=http://localhost:11434
 
+# Models for each service
 WITTY_TEXT_MODEL=gemma3:1b
 CUBE_ANALYSIS_MODEL=gemma3:12b
 
 # API Configuration
 PORT=5000
 DEBUG=True
+CORS_ORIGINS=*
 ```
 
 ## Cloud Run Deployment
 
 ### Prerequisites
 
-1. Install Google Cloud SDK
-2. Set up a Google Cloud project
-3. Enable Cloud Run and Cloud Build APIs
+1.  Install the Google Cloud SDK.
+2.  Authenticate with `gcloud auth login`.
+3.  Set up a Google Cloud project and enable the Cloud Run and Cloud Build APIs.
 
 ### Deploy
+
+The included script automates the build and deployment process.
 
 ```bash
 # Make deploy script executable
 chmod +x deploy.sh
 
-# Deploy to Cloud Run
-./deploy.sh YOUR_PROJECT_ID us-central1
+# Deploy to Cloud Run (replace with your project ID and desired region)
+./deploy.sh YOUR_PROJECT_ID europe-west1
 ```
 
 The script will:
-- Build your container image
-- Push to Google Container Registry
-- Deploy to Cloud Run
-- Output the service URL
-
-### Manual Deployment
-
-```bash
-# Set your project
-gcloud config set project YOUR_PROJECT_ID
-
-# Build the image
-gcloud builds submit --tag gcr.io/YOUR_PROJECT_ID/snailmail-api
-
-# Deploy to Cloud Run
-gcloud run deploy snailmail-api \
-  --image gcr.io/YOUR_PROJECT_ID/snailmail-api \
-  --platform managed \
-  --region us-central1 \
-  --allow-unauthenticated \
-  --memory 2Gi \
-  --set-env-vars SERVICE_TYPE=cloudrun,INFERENCE_SERVICE_URL=https://your-inference-service.run.app
-```
+-   Build the container image using Cloud Build.
+-   Push the image to Google Container Registry.
+-   Deploy the image to Cloud Run with recommended settings.
+-   Output the final service URL.
 
 ## API Reference
 
 ### `POST /analyze-cube`
 
-Analyzes a Rubik's cube face from an uploaded image.
+Analyzes a Rubik's cube face from an uploaded image. It first attempts analysis with a fast computer vision algorithm and falls back to a vision language model if confidence is low.
 
 **Request:**
-- Content-Type: `multipart/form-data`
-- Body: `image` field with image file
+-   Content-Type: `multipart/form-data`
+-   Body: An `image` field containing the image file.
 
-**Response:**
+**Success Response (200):**
 ```json
 {
   "success": true,
   "cube_face": {
-    "TL": "R", "TC": "R", "TR": "R",
-    "ML": "O", "C": "R", "MR": "G",
-    "BL": "Y", "BC": "G", "BR": "B"
+    "TL": "R", "TC": "G", "TR": "B",
+    "ML": "W", "C": "Y", "MR": "O",
+    "BL": "G", "BC": "R", "BR": "W"
   }
 }
 ```
 
 **Color Codes:**
-- `R` - Red
-- `G` - Green
-- `B` - Blue
-- `O` - Orange
-- `Y` - Yellow
-- `W` - White
+-   `R` - Red
+-   `G` - Green
+-   `B` - Blue
+-   `O` - Orange
+-   `Y` - Yellow
+-   `W` - White
 
-**Tile Positions:**
-- `TL` - Top Left
-- `TC` - Top Center
-- `TR` - Top Right
-- `ML` - Middle Left
-- `C` - Center
-- `MR` - Middle Right
-- `BL` - Bottom Left
-- `BC` - Bottom Center
-- `BR` - Bottom Right
+### `POST /taunt`
 
-### `POST /validate-cube`
-
-Validates cube face data directly (useful for testing).
+Generates a witty taunt from an NPC character directed at a player.
 
 **Request:**
 ```json
 {
-  "TL": "R", "TC": "R", "TR": "R",
-  "ML": "O", "C": "R", "MR": "G",
-  "BL": "Y", "BC": "G", "BR": "B"
+  "npc_character": "duck",
+  "player_character": "snail",
+  "context": "Player just failed a simple puzzle"
 }
 ```
 
-**Response:**
+**Success Response (200):**
 ```json
 {
-  "valid": true,
-  "cube_face": { ... }
+    "success": true,
+    "taunt": "Oh, well done. I'm sure the Weighted Companion Cube is very impressed.",
+    "npc_character": "duck",
+    "player_character": "snail"
 }
 ```
 
 ### `GET /health`
 
-Health check endpoint.
+A health check endpoint that returns key configuration values.
 
 **Response:**
 ```json
 {
-  "status": "healthy",
-  "service_type": "ollama",
-  "inference_url": "http://localhost:11434"
+  "SERVICE_TYPE": "ollama",
+  "CORS_ORIGINS": "*",
+  "WITTY_TEXT_MODEL": "gemma3:1b",
+  "CUBE_ANALYSIS_MODEL": "gemma3:12b"
 }
 ```
 
-## Development
-
-### Running Tests Locally
-
-```bash
-# Activate virtual environment
-source venv/bin/activate
-
-# Run the app
-python app.py
-
-# In another terminal, test endpoints
-curl http://localhost:5000/health
-```
-
-### Building Docker Image Locally
-
-```bash
-# Build
-docker build -t snailmail-api .
-
-# Run
-docker run -p 5000:8080 \
-  -e SERVICE_TYPE=ollama \
-  -e INFERENCE_SERVICE_URL=http://host.docker.internal:11434 \
-  -e PORT=8080 \
-  snailmail-api
-
-# Test
-curl http://localhost:5000/health
-```
-
-## Validation
-
-The API uses Pydantic for strict validation:
-
-- ✅ Only valid color codes (`R`, `G`, `B`, `O`, `Y`, `W`)
-- ✅ All 9 tiles must be present
-- ✅ Descriptive error messages for invalid data
-
 ## Error Handling
 
-The API returns appropriate HTTP status codes:
+The API returns standard HTTP status codes:
 
-- `200` - Success
-- `400` - Bad request (missing image)
-- `422` - Validation error (invalid cube data)
-- `500` - Server error
-- `503` - Inference service unavailable
-
-## License
-
-MIT
-
-## Contributing
-
-Issues and pull requests welcome!
+-   `200`: Success.
+-   `400`: Bad Request (e.g., missing image file, invalid JSON).
+-   `422`: Unprocessable Entity (validation error, e.g., invalid color codes).
+-   `499`: Client Closed Request (client disconnected during a long process).
+-   `500`: Internal Server Error.
+-   `503`: Service Unavailable (inference service could not be reached).
